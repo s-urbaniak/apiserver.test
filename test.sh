@@ -2,7 +2,10 @@
 
 set -exuo pipefail
 
+export ETCD_TEMP_DIR="$(mktemp -d)"
+export TSDB_TEMP_DIR="$(mktemp -d)"
 export KUBECONFIG=_output/tls/kubeconfig
+export KUBECTL=_output/kube/server/bin/kubectl
 
 if [[ ! -f _output/etcd/etcd ]]; then
     v=3.2.24
@@ -124,8 +127,6 @@ contexts:
 EOF
 fi
 
-ETCD_TEMP_DIR="$(mktemp -d)"
-
 (
     etcd --name master0 \
          --data-dir "${ETCD_TEMP_DIR}" \
@@ -137,7 +138,6 @@ ETCD_TEMP_DIR="$(mktemp -d)"
          --election-timeout 5000
 ) &
 
-TSDB_TEMP_DIR="$(mktemp -d)"
 (
     prometheus \
       --config.file=./prom-local.conf \
@@ -186,9 +186,8 @@ curl --retry 100 --retry-delay 1 --retry-connrefused -v http://127.0.0.1:2379/ve
     --requestheader-username-headers=X-Remote-User
 ) &
 
-KUBECTL=_output/kube/server/bin/kubectl
 set +e
-until $KUBECTL -n kube-system get configmap extension-apiserver-authentication; do
+until $KUBECTL --kubeconfig $KUBECONFIG -n kube-system get configmap extension-apiserver-authentication; do
     sleep 1
 done
 set -e
@@ -204,5 +203,14 @@ export PATH=$PATH:$HOME/src/redhat/go/src/github.com/directxman12/k8s-prometheus
         --authorization-kubeconfig=$KUBECONFIG \
         --lister-kubeconfig=$KUBECONFIG
 ) &
+
+function cleanup {
+    echo killing $(jobs -p)
+    kill $(jobs -p)
+    rm -rf "${ETCD_TEMP_DIR}"
+    rm -rf "${TSDB_TEMP_DIR}"
+}
+
+trap cleanup EXIT
 
 for i in `jobs -p`; do wait $i; done
