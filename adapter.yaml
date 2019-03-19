@@ -1,0 +1,23 @@
+externalRules:
+- seriesQuery: 'http_requests_total{namespace!="",pod!=""}'
+  resources:
+    overrides:
+      namespace: {resource: "namespace"}
+      pod: {resource: "pod"}
+      service: {resource: "service"}
+  name:
+    matches: "^(.*)_total"
+    as: "${1}_per_second"      
+  metricsQuery: 'sum(rate(<<.Series>>{<<.LabelMatchers>>}[2m])) by (<<.GroupBy>>)'
+
+rules:
+- seriesQuery: 'tube_current_jobs_ready'
+  seriesFilters: []
+  resources:
+    overrides:
+      k8s_namespace: {resource: 'namespaces'}
+      k8s_service: {resource: 'services'}
+  name:
+    matches: tube_current_jobs_ready
+    as: ""
+  metricsQuery: <<.Series>>{<<.LabelMatchers>>}
